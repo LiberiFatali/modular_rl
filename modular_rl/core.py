@@ -80,6 +80,7 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
     if cfg["parallel"]:
         raise NotImplementedError
 
+    elapsed_episodes = 0
     tstart = time.time()
     seed_iter = itertools.count()
 
@@ -101,6 +102,8 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
         # Stats ========
         stats = OrderedDict()
         add_episode_stats(stats, paths)
+        elapsed_episodes += stats["NumEpBatch"]
+        stats["ElapsedEpisodes"] = elapsed_episodes
         add_prefixed_stats(stats, "vf", vf_stats)
         add_prefixed_stats(stats, "pol", pol_stats)
         stats["TimePaths"] = time_paths
