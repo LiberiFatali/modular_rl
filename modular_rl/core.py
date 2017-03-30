@@ -84,18 +84,30 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
     seed_iter = itertools.count()
 
     for _ in xrange(cfg["n_iter"]):
+        tprev = time.time()
+        time_iter_start = tprev
         # Rollouts ========
         paths = get_paths(env, agent, cfg, seed_iter)
+        time_paths = time.time() - tprev; tprev = time.time()
         compute_advantage(agent.baseline, paths, gamma=cfg["gamma"], lam=cfg["lam"])
+        time_adv = time.time() - tprev; tprev = time.time()
         # VF Update ========
         vf_stats = agent.baseline.fit(paths)
+        time_vf = time.time() - tprev; tprev = time.time()
         # Pol Update ========
         pol_stats = agent.updater(paths)
+        time_iter_end = time.time()
+        time_pol = time_iter_end - tprev; tprev = time.time()
         # Stats ========
         stats = OrderedDict()
         add_episode_stats(stats, paths)
         add_prefixed_stats(stats, "vf", vf_stats)
         add_prefixed_stats(stats, "pol", pol_stats)
+        stats["TimePaths"] = time_paths
+        stats["TimeAdvantage"] = time_adv
+        stats["TimeVF"] = time_vf
+        stats["TimePol"] = time_pol
+        stats["TimeIter"] = time_iter_end - time_iter_start
         stats["TimeElapsed"] = time.time() - tstart
         if callback: callback(stats)
 
