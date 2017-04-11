@@ -1,4 +1,5 @@
 import numpy as np, time, itertools
+import multiprocessing
 from collections import OrderedDict
 from .misc_utils import *
 from . import distributions
@@ -77,9 +78,6 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
     cfg.update(usercfg)
     print "policy gradient config", cfg
 
-    if cfg["parallel"]:
-        raise NotImplementedError
-
     elapsed_episodes = 0
     tstart = time.time()
     seed_iter = itertools.count()
@@ -116,7 +114,7 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
 
 def get_paths(env, agent, cfg, seed_iter):
     if cfg["parallel"]:
-        raise NotImplementedError
+        paths = do_rollouts_parallel(env, agent, cfg["timestep_limit"], cfg["timesteps_per_batch"], seed_iter, cfg["parallel"])
     else:
         paths = do_rollouts_serial(env, agent, cfg["timestep_limit"], cfg["timesteps_per_batch"], seed_iter)
     return paths
@@ -154,11 +152,60 @@ def do_rollouts_serial(env, agent, timestep_limit, n_timesteps, seed_iter):
     timesteps_sofar = 0
     while True:
         np.random.seed(seed_iter.next())
+        roll_start = time.time()
         path = rollout(env, agent, timestep_limit)
+        print 'Rollout time: %s' % (time.time() - roll_start)
         paths.append(path)
         timesteps_sofar += pathlength(path)
         if timesteps_sofar > n_timesteps:
             break
+    return paths
+
+def rollout_worker(env, agent, timestep_limit, result_queue, seed_queue):
+    while True:
+        seed_start = time.time()
+        seed = seed_queue.get()
+        print 'Seed time: %s' % (time.time() - seed_start)
+        np.random.seed(seed)
+        roll_start = time.time()
+        data = rollout(env, agent, timestep_limit)
+        print 'Rollout time: %s' % (time.time() - roll_start)
+        data['seed'] = seed
+        result_start = time.time()
+        result_queue.put(data)
+        print 'Result time: %s' % (time.time() - result_start)
+
+def do_rollouts_parallel(env, agent, timestep_limit, n_timesteps, seed_iter, n_workers):
+    print 'starting'
+    paths = []
+    timesteps_sofar = 0
+    seed_queue = multiprocessing.Queue()
+    # Below, we add a seed each time a worker finishes a rollout. But multiple
+    # workers may fetch seeds before their paths are handled, so we prime
+    # the seed queue to make sure it never empties. This means that we end
+    # up skipping a bunch of seeds each time do_rollouts_parallel is called.
+    for i in xrange(1000):
+        seed_queue.put(seed_iter.next())
+    result_queue = multiprocessing.Queue()
+    procs = [multiprocessing.Process(
+        target=rollout_worker, args=(env, agent, timestep_limit,
+            result_queue, seed_queue))
+        for i in xrange(n_workers)]
+    for proc in procs:
+        proc.start()
+    print 'running'
+    while True:
+        seed_queue.put(seed_iter.next())
+        path = result_queue.get()
+        paths.append(path)
+        timesteps_sofar += pathlength(path)
+        if timesteps_sofar > n_timesteps:
+            break
+    print 'terminating'
+    for proc in procs:
+        proc.terminate()
+        proc.join()
+    print 'done'
     return paths
 
 def pathlength(path):
