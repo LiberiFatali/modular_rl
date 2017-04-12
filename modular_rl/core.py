@@ -1,3 +1,4 @@
+import os, cProfile, signal, sys
 import numpy as np, time, itertools
 import multiprocessing
 from collections import OrderedDict
@@ -38,6 +39,8 @@ def add_episode_stats(stats, paths):
     stats["EpLenMean"] = pathlengths.mean()
     stats["EpLenMax"] = pathlengths.max()
     stats["RewPerStep"] = episoderewards.sum()/pathlengths.sum()
+    stats["EpisodeTimes"] = np.array([path["time"] for path in paths])
+    stats["EpisodeStepTimes"] = np.concatenate([path["step_time"] for path in paths])
 
 def add_prefixed_stats(stats, prefix, d):
     for (k,v) in d.iteritems():
@@ -71,6 +74,7 @@ PG_OPTIONS = [
     ("timesteps_per_batch", int, 10000, ""),
     ("gamma", float, 0.99, "discount"),
     ("lam", float, 1.0, "lambda parameter from generalized advantage estimation"),
+    ("profile", int, 0, "enable profiling of one worker")
 ]
 
 def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
@@ -82,11 +86,11 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
     tstart = time.time()
     seed_iter = itertools.count()
 
-    for _ in xrange(cfg["n_iter"]):
+    for i in xrange(cfg["n_iter"]):
         tprev = time.time()
         time_iter_start = tprev
         # Rollouts ========
-        paths = get_paths(env, agent, cfg, seed_iter)
+        paths = get_paths(env, agent, cfg, seed_iter, i)
         time_paths = time.time() - tprev; tprev = time.time()
         compute_advantage(agent.baseline, paths, gamma=cfg["gamma"], lam=cfg["lam"])
         time_adv = time.time() - tprev; tprev = time.time()
@@ -112,9 +116,9 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
         stats["TimeElapsed"] = time.time() - tstart
         if callback: callback(stats)
 
-def get_paths(env, agent, cfg, seed_iter):
+def get_paths(env, agent, cfg, seed_iter, generation):
     if cfg["parallel"]:
-        paths = do_rollouts_parallel(env, agent, cfg["timestep_limit"], cfg["timesteps_per_batch"], seed_iter, cfg["parallel"])
+        paths = do_rollouts_parallel(env, agent, cfg["timestep_limit"], cfg["timesteps_per_batch"], seed_iter, cfg["parallel"], generation, cfg["profile"])
     else:
         paths = do_rollouts_serial(env, agent, cfg["timestep_limit"], cfg["timesteps_per_batch"], seed_iter)
     return paths
@@ -124,6 +128,7 @@ def rollout(env, agent, timestep_limit):
     """
     Simulate the env and agent for timestep_limit steps
     """
+    start_time = time.time()
     ob = env.reset()
     terminated = False
 
@@ -135,7 +140,9 @@ def rollout(env, agent, timestep_limit):
         data["action"].append(action)
         for (k,v) in agentinfo.iteritems():
             data[k].append(v)
+        step_start = time.time()
         ob,rew,done,envinfo = env.step(action)
+        data["step_time"].append(time.time() - step_start)
         data["reward"].append(rew)
         rew = agent.rewfilt(rew)
         for (k,v) in envinfo.iteritems():
@@ -145,6 +152,7 @@ def rollout(env, agent, timestep_limit):
             break
     data = {k:np.array(v) for (k,v) in data.iteritems()}
     data["terminated"] = terminated
+    data["time"] = time.time() - start_time
     return data
 
 def do_rollouts_serial(env, agent, timestep_limit, n_timesteps, seed_iter):
@@ -154,28 +162,36 @@ def do_rollouts_serial(env, agent, timestep_limit, n_timesteps, seed_iter):
         np.random.seed(seed_iter.next())
         roll_start = time.time()
         path = rollout(env, agent, timestep_limit)
-        print 'Rollout time: %s' % (time.time() - roll_start)
         paths.append(path)
         timesteps_sofar += pathlength(path)
         if timesteps_sofar > n_timesteps:
             break
     return paths
 
-def rollout_worker(env, agent, timestep_limit, result_queue, seed_queue):
+def rollout_worker(env, agent, timestep_limit, result_queue, seed_queue,
+        generation, do_profile):
+    if do_profile:
+        prof = cProfile.Profile()
+        prof.enable()
+        def sigterm_handler(signo, frame):
+            prof.disable()
+            prof.dump_stats("profile-%d.prof" % generation)
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, sigterm_handler)
     while True:
         seed_start = time.time()
         seed = seed_queue.get()
-        print 'Seed time: %s' % (time.time() - seed_start)
+        #print 'Seed time: %s' % (time.time() - seed_start)
         np.random.seed(seed)
         roll_start = time.time()
         data = rollout(env, agent, timestep_limit)
-        print 'Rollout time: %s' % (time.time() - roll_start)
+        #print 'Rollout time: %s' % (time.time() - roll_start)
         data['seed'] = seed
         result_start = time.time()
         result_queue.put(data)
-        print 'Result time: %s' % (time.time() - result_start)
+        #print 'Result time: %s' % (time.time() - result_start)
 
-def do_rollouts_parallel(env, agent, timestep_limit, n_timesteps, seed_iter, n_workers):
+def do_rollouts_parallel(env, agent, timestep_limit, n_timesteps, seed_iter, n_workers, generation, do_profile):
     print 'starting'
     paths = []
     timesteps_sofar = 0
@@ -189,10 +205,12 @@ def do_rollouts_parallel(env, agent, timestep_limit, n_timesteps, seed_iter, n_w
     result_queue = multiprocessing.Queue()
     procs = [multiprocessing.Process(
         target=rollout_worker, args=(env, agent, timestep_limit,
-            result_queue, seed_queue))
+            result_queue, seed_queue, generation, do_profile and i == 0))
         for i in xrange(n_workers)]
-    for proc in procs:
+    for i, proc in enumerate(procs):
         proc.start()
+        # setting cpu affinity seems to give a ~10% perf bump.
+        os.system("taskset -p -c %d %d" % (i, proc.pid))
     print 'running'
     while True:
         seed_queue.put(seed_iter.next())
