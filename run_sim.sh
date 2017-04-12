@@ -1,3 +1,5 @@
 #!/bin/bash
 
-python sim_agent.py $1
+export KERAS_BACKEND=theano
+
+python sim_agent.py $1 $2

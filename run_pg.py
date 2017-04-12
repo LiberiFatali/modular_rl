@@ -18,7 +18,11 @@ if __name__ == "__main__":
     parser.add_argument("--agent",required=True)
     parser.add_argument("--plot",action="store_true")
     args,_ = parser.parse_known_args([arg for arg in sys.argv[1:] if arg not in ('-h', '--help')])
-    env = make(args.env)
+    if args.env == 'OsimGait':
+        from osim.env import GaitEnv
+        env = GaitEnv(visualize=False)
+    else:
+        env = make(args.env)
     env_spec = env.spec
     mondir = args.outfile + ".dir"
     if os.path.exists(mondir): shutil.rmtree(mondir)

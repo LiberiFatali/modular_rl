@@ -32,6 +32,7 @@ def animate_rollout(env, agent, n_timesteps,delay=.01):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("hdf")
+    parser.add_argument("--env")
     parser.add_argument("--timestep_limit",type=int)
     parser.add_argument("--snapname")
     args = parser.parse_args()
@@ -47,7 +48,11 @@ def main():
     else: 
         snapname = args.snapname
 
-    env = gym.make(hdf["env_id"].value)
+    if args.env == 'OsimGait':
+        from osim.env import GaitEnv
+        env = GaitEnv(visualize=False)
+    else:
+        env = gym.make(hdf["env_id"].value)
 
     agent = cPickle.loads(hdf['agent_snapshots'][snapname].value)
     agent.stochastic=False
