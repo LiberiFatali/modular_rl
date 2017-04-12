@@ -1,0 +1,4 @@
+FROM shawnlewis/openai-gym:cpu
+
+RUN conda install -c kidzik opensim libgcc
+RUN pip install git+https://github.com/kidzik/osim-rl.git

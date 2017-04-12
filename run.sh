@@ -2,6 +2,8 @@
 
 env=$1
 
+export KERAS_BACKEND=theano
+
 xvfb-run -s "-screen 0 1400x900x24" \
     ./run_pg.py \
         --env=$env \
