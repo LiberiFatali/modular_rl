@@ -1,3 +1,31 @@
+This repository has been modified with the following changes:
+- parallel rollouts for TRPO
+- --profile flag to profile a single worker using cProfile
+- Dockerfile that builds an easy to use container with all dependencies
+- Ability to run the Gait environment from osim-rl
+
+To run parallel OsimGait experiments follow these steps
+- Install docker (https://docs.docker.com/engine/installation/linux/ubuntu/)
+- pull shawnlewis/modular_rl:cpu
+
+    docker pull shawnlewis/modular_rl:cpu
+    
+- clone the repository
+
+    mkdir ~/dockershare
+    cd ~/dockershare
+    git clone https://github.com/shawnlewis/modular_rl.git
+    
+- run the container
+
+    sudo docker run -it -v ~/dockershare:/root/share shawnlewis/modular_rl:cpu bash
+    
+- run the experiment
+
+    cd /root/share/modular_rl
+    # modify run.sh with the parameters you want
+    ./run.sh OsimGait
+
 This repository implements several algorithms:
 
 - Trust Region Policy Optimization [1]
