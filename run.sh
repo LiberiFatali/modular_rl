@@ -17,8 +17,8 @@ xvfb-run -s "-screen 0 1400x900x24" \
         --seed=0 \
         --use_hdf=1 \
         --snapshot_every=1 \
-        --timesteps_per_batch=40000 \
-	--parallel=6 \
-	--profile=0 \
-	--video=0 \
-        --n_iter=2
+        --timesteps_per_batch=50000 \
+        --parallel=0 \
+        --profile=0 \
+        --video=0 \
+        --n_iter=1000

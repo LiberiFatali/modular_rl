@@ -118,22 +118,23 @@ def run_policy_gradient_algorithm(env, agent, usercfg=None, callback=None):
 
 def get_paths(env, agent, cfg, seed_iter, generation):
     if cfg["parallel"]:
-        paths = do_rollouts_parallel(env, agent, cfg["timestep_limit"], cfg["timesteps_per_batch"], seed_iter, cfg["parallel"], generation, cfg["profile"])
+        paths = do_rollouts_parallel(env, agent, cfg["timesteps_per_batch"], seed_iter, cfg["parallel"], generation, cfg["profile"])
     else:
-        paths = do_rollouts_serial(env, agent, cfg["timestep_limit"], cfg["timesteps_per_batch"], seed_iter)
+        paths = do_rollouts_serial(env, agent, cfg["timesteps_per_batch"], seed_iter)
     return paths
 
 
-def rollout(env, agent, timestep_limit):
+def rollout(env, agent):
     """
-    Simulate the env and agent for timestep_limit steps
+    Simulate the env and agent.
     """
     start_time = time.time()
     ob = env.reset()
     terminated = False
 
     data = defaultdict(list)
-    for _ in xrange(timestep_limit):
+    # timestep_limit is enforced by external TimeLimit wrapper.
+    while 1:
         ob = agent.obfilt(ob)
         data["observation"].append(ob)
         action, agentinfo = agent.act(ob)
@@ -155,20 +156,20 @@ def rollout(env, agent, timestep_limit):
     data["time"] = time.time() - start_time
     return data
 
-def do_rollouts_serial(env, agent, timestep_limit, n_timesteps, seed_iter):
+def do_rollouts_serial(env, agent, n_timesteps, seed_iter):
     paths = []
     timesteps_sofar = 0
     while True:
         np.random.seed(seed_iter.next())
         roll_start = time.time()
-        path = rollout(env, agent, timestep_limit)
+        path = rollout(env, agent)
         paths.append(path)
         timesteps_sofar += pathlength(path)
         if timesteps_sofar > n_timesteps:
             break
     return paths
 
-def rollout_worker(env, agent, timestep_limit, result_queue, seed_queue,
+def rollout_worker(env, agent, result_queue, seed_queue,
         generation, do_profile):
     if do_profile:
         prof = cProfile.Profile()
@@ -184,14 +185,14 @@ def rollout_worker(env, agent, timestep_limit, result_queue, seed_queue,
         #print 'Seed time: %s' % (time.time() - seed_start)
         np.random.seed(seed)
         roll_start = time.time()
-        data = rollout(env, agent, timestep_limit)
+        data = rollout(env, agent)
         #print 'Rollout time: %s' % (time.time() - roll_start)
         data['seed'] = seed
         result_start = time.time()
         result_queue.put(data)
         #print 'Result time: %s' % (time.time() - result_start)
 
-def do_rollouts_parallel(env, agent, timestep_limit, n_timesteps, seed_iter, n_workers, generation, do_profile):
+def do_rollouts_parallel(env, agent, n_timesteps, seed_iter, n_workers, generation, do_profile):
     print 'starting'
     paths = []
     timesteps_sofar = 0
@@ -204,7 +205,7 @@ def do_rollouts_parallel(env, agent, timestep_limit, n_timesteps, seed_iter, n_w
         seed_queue.put(seed_iter.next())
     result_queue = multiprocessing.Queue()
     procs = [multiprocessing.Process(
-        target=rollout_worker, args=(env, agent, timestep_limit,
+        target=rollout_worker, args=(env, agent,
             result_queue, seed_queue, generation, do_profile and i == 0))
         for i in xrange(n_workers)]
     for i, proc in enumerate(procs):
