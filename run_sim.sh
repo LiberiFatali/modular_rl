@@ -2,4 +2,4 @@
 
 export KERAS_BACKEND=theano
 
-python sim_agent.py $1 $2
+python sim_agent.py $1 $2 $3
