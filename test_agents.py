@@ -30,6 +30,7 @@ def animate_rollout(env, agent, n_timesteps,delay=.01):
         total_rew += rew
         print i, rew, total_rew
         time.sleep(delay)
+    infos['total_reward'] = total_rew
     return infos
 
 def main():
@@ -37,38 +38,28 @@ def main():
     parser.add_argument("hdf")
     parser.add_argument("--env")
     parser.add_argument("--timestep_limit",type=int)
-    parser.add_argument("--snapname")
     args = parser.parse_args()
 
     hdf = h5py.File(args.hdf,'r')
 
     snapnames = hdf['agent_snapshots'].keys()
     print "snapshots:\n",snapnames
-    if args.snapname is None: 
-        snapname = snapnames[-1]
-    elif args.snapname not in snapnames:
-        raise ValueError("Invalid snapshot name %s"%args.snapname)
-    else: 
-        snapname = args.snapname
 
-    if args.env == 'OsimGait':
-        from osim.env import GaitEnv
-        env = GaitEnv(visualize=False)
-    else:
-        env = gym.make(hdf["env_id"].value)
+    from osim.env import GaitEnv
+    env = GaitEnv(visualize=False)
 
-    agent = cPickle.loads(hdf['agent_snapshots'][snapname].value)
-    agent.stochastic=True
+    ofile = open('run_results.txt', 'a')
+    for i in xrange(900, 1000):
+        snapname = '%04d' % i
+        print 'SNAPNAME: %s' % snapname
 
-    timestep_limit = args.timestep_limit or env.spec.timestep_limit
+        for i in xrange(10):
+            agent = cPickle.loads(hdf['agent_snapshots'][snapname].value)
+            agent.stochastic=False
+            infos = animate_rollout(env,agent, 500, delay=0)
+            ofile.write('%s %s\n' % (snapname, infos['total_reward']))
+            ofile.flush()
 
-    while True:
-        infos = animate_rollout(env,agent,n_timesteps=timestep_limit, 
-            delay=1.0/env.metadata.get('video.frames_per_second', 30))
-        for (k,v) in infos.items():
-            if k.startswith("reward"):
-                print "%s: %f"%(k, np.sum(v))
-        raw_input("press enter to continue")
 
 if __name__ == "__main__":
     main()

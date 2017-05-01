@@ -23,8 +23,7 @@ def main():
 
     env = GaitEnv(visualize=False)
 
-    print hdf['agent_snapshots']['0947']
-    agent = cPickle.loads(hdf['agent_snapshots']['0947'].value)
+    agent = cPickle.loads(hdf['agent_snapshots']['0995'].value)
     agent.stochastic=False
 
     client = Client(remote_base)
