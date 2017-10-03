@@ -20,4 +20,4 @@ export KERAS_BACKEND=theano
     --parallel=4 \
     --profile=0 \
     --video=0 \
-    --n_iter=2
+    --n_iter=10
