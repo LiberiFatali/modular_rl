@@ -129,7 +129,15 @@ def rollout(env, agent):
     Simulate the env and agent.
     """
     start_time = time.time()
-    ob = env.reset()
+    try:
+        import wandb
+        difficulty = wandb.run.config['difficulty']
+        env.reset()
+        # OsimRun environment is wrapped twice, wrappers don't pass kwargs through. So reach in
+        # and do it.
+        ob = env.env.env.reset(difficulty=difficulty)
+    except KeyError:
+        ob = env.reset()
     terminated = False
 
     data = defaultdict(list)
