@@ -1,0 +1,11 @@
+wandb_version: 1
+
+# Example variables below. Uncomment (remove leading '# ') to use them, or just
+# delete and create your own.
+
+difficulty:
+  desc: Environment difficulty
+  value: 0
+# batch_size:
+#   desc: Size of each mini-batch
+#   value: 32
