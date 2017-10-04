@@ -18,9 +18,12 @@ if __name__ == "__main__":
     update_argument_parser(parser, GENERAL_OPTIONS)
     parser.add_argument("--env",required=True)
     parser.add_argument("--agent",required=True)
+    parser.add_argument('--load_agent', required=False)
     parser.add_argument("--plot",action="store_true")
     args,_ = parser.parse_known_args([arg for arg in sys.argv[1:] if arg not in ('-h', '--help')])
     run = wandb.init()
+
+    # contruct env
     if args.env == 'OsimGait':
         from osim.env import GaitEnv
         env = GaitEnv(visualize=False)
@@ -37,6 +40,8 @@ if __name__ == "__main__":
     if os.path.exists(mondir): shutil.rmtree(mondir)
     os.mkdir(mondir)
     env = gym.wrappers.Monitor(env, mondir, video_callable=None if args.video else VIDEO_NEVER)
+
+    # setup args and config
     agent_ctor = get_agent_cls(args.agent)
     update_argument_parser(parser, agent_ctor.options)
     args = parser.parse_args()
@@ -45,7 +50,13 @@ if __name__ == "__main__":
     print 'args.timestep_limit', args.timestep_limit
     cfg = args.__dict__
     np.random.seed(args.seed)
-    agent = agent_ctor(env.observation_space, env.action_space, cfg)
+
+    # construct agent
+    if args.load_agent:
+        agent = cPickle.load(open(args.load_agent))
+    else:
+        agent = agent_ctor(env.observation_space, env.action_space, cfg)
+
     if args.use_hdf:
         hdf, diagnostics = prepare_h5_file(args)
     gym.logger.setLevel(logging.WARN)
